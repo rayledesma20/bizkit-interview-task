@@ -18,5 +18,15 @@
     "to_date": "2026-07-31",
     "total": 36000.0,
     "status": "confirmed"
+  },
+  {
+    "id": 3,
+    "equipment_id": 1,
+    "equipment_name": "Canon DSLR Camera",
+    "customer": "John",
+    "from_date": "2025-01-05",
+    "to_date": "2025-01-12",
+    "total": 10500.0,
+    "status": "confirmed"
   }
 ]
