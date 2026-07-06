@@ -1,0 +1,12 @@
+[
+  {
+    "id": 1,
+    "equipment_id": 1,
+    "equipment_name": "Canon DSLR Camera",
+    "customer": "Existing Customer",
+    "from_date": "2026-01-10",
+    "to_date": "2026-01-15",
+    "total": 9000.0,
+    "status": "confirmed"
+  }
+]

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Equipment Rental</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; }
+    label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 0.9rem; }
+    select, input { width: 100%; padding: 8px; font-size: 1rem; box-sizing: border-box; }
+    button { margin-top: 16px; padding: 10px 16px; font-size: 1rem; cursor: pointer; }
+    .total { margin-top: 16px; font-size: 1.2rem; font-weight: 700; }
+    .message { margin-top: 16px; padding: 10px; border-radius: 6px; }
+    .ok { background: #e6f4ea; color: #1e7e34; }
+    .err { background: #fdecea; color: #c0392b; }
+  </style>
+</head>
+<body>
+  <h1>Book Equipment</h1>
+
+  <label for="equipment">Equipment</label>
+  <select id="equipment"></select>
+
+  <label for="customer">Customer name</label>
+  <input id="customer" type="text" placeholder="e.g. Jane Doe" />
+
+  <label for="from">Start date</label>
+  <input id="from" type="date" />
+
+  <label for="to">End date</label>
+  <input id="to" type="date" />
+
+  <div class="total" id="total">Total: PHP 0.00</div>
+
+  <button id="book">Create booking</button>
+
+  <div id="message"></div>
+
+  <script>
+    let equipmentList = [];
+
+    async function loadEquipment() {
+      const res = await fetch("/api/equipment");
+      equipmentList = await res.json();
+      const select = document.getElementById("equipment");
+      select.innerHTML = "";
+      equipmentList.forEach(item => {
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = `${item.name} (PHP ${item.daily_rate}/day)`;
+        select.appendChild(opt);
+      });
+    }
+
+    function selectedEquipment() {
+      const id = Number(document.getElementById("equipment").value);
+      return equipmentList.find(e => e.id === id);
+    }
+
+    function dayCount(from, to) {
+      // Rentals are billed inclusively: both start and end day count.
+      const ms = new Date(to) - new Date(from);
+      return Math.round(ms / (1000 * 60 * 60 * 24)) + 1;
+    }
+
+    function updateTotal() {
+      const equipment = selectedEquipment();
+      const from = document.getElementById("from").value;
+      const to = document.getElementById("to").value;
+      const totalEl = document.getElementById("total");
+
+      if (!equipment || !from || !to) {
+        totalEl.textContent = "Total: PHP 0.00";
+        return;
+      }
+      const days = dayCount(from, to);
+      if (days < 1) {
+        totalEl.textContent = "Total: PHP 0.00";
+        return;
+      }
+      const total = equipment.daily_rate * days;
+      totalEl.textContent = `Total: PHP ${total.toFixed(2)} (${days} day${days > 1 ? "s" : ""})`;
+    }
+
+    async function createBooking() {
+      const messageEl = document.getElementById("message");
+      messageEl.className = "";
+      messageEl.textContent = "";
+
+      const body = {
+        equipment_id: Number(document.getElementById("equipment").value),
+        customer: document.getElementById("customer").value,
+        from_date: document.getElementById("from").value,
+        to_date: document.getElementById("to").value,
+      };
+
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        messageEl.className = "message ok";
+        messageEl.textContent = `Booked! Total PHP ${data.total.toFixed(2)}.`;
+      } else {
+        messageEl.className = "message err";
+        messageEl.textContent = data.error;
+      }
+    }
+
+    document.getElementById("equipment").addEventListener("change", updateTotal);
+    document.getElementById("from").addEventListener("change", updateTotal);
+    document.getElementById("book").addEventListener("click", createBooking);
+
+    loadEquipment();
+  </script>
+</body>
+</html>
