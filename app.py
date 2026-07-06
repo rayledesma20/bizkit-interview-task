@@ -10,6 +10,7 @@ Business rules:
   - Rentals are billed *inclusively*: both the start day and the end day count.
     (A pick-up-and-return-same-day rental is therefore 1 day.)
   - You cannot book a piece of equipment for dates that overlap an existing booking.
+  - Equipment that is not available (e.g. under maintenance) cannot be booked.
 """
 
 from datetime import date
@@ -52,12 +53,30 @@ def get_equipment(equipment_id):
     return None
 
 
+def is_bookable(item):
+    return item.get("status") == "available"
+
+
 # ---------------------------------------------------------------------------
 # Booking logic
 # ---------------------------------------------------------------------------
 
 def parse_date(value):
     return date.fromisoformat(value)
+
+
+def parse_booking_dates(data):
+    """Return (from_date, to_date) or raise ValueError with a message."""
+    from_raw = data.get("from_date")
+    to_raw = data.get("to_date")
+    if not from_raw or not to_raw:
+        raise ValueError("Start and end dates are required")
+    try:
+        from_date = parse_date(from_raw)
+        to_date = parse_date(to_raw)
+    except (TypeError, ValueError):
+        raise ValueError("Invalid date format") from None
+    return from_date, to_date
 
 
 def rental_days(from_date, to_date):
@@ -108,12 +127,24 @@ def list_bookings():
 
 @app.route("/api/availability")
 def availability():
-    from_date = parse_date(request.args["from"])
-    to_date = parse_date(request.args["to"])
+    from_raw = request.args.get("from")
+    to_raw = request.args.get("to")
+    if not from_raw or not to_raw:
+        return jsonify({"error": "Start and end dates are required"}), 400
+    try:
+        from_date = parse_date(from_raw)
+        to_date = parse_date(to_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid date format"}), 400
+    if to_date < from_date:
+        return jsonify({"error": "End date cannot be before start date"}), 400
+
     bookings = load_bookings()
 
     available = []
     for item in EQUIPMENT:
+        if not is_bookable(item):
+            continue
         conflict = find_conflicting_booking(item["id"], from_date, to_date, bookings)
         if conflict is None:
             available.append(item)
@@ -127,11 +158,19 @@ def create_booking():
     equipment = get_equipment(data.get("equipment_id"))
     if equipment is None:
         return jsonify({"error": "Unknown equipment"}), 400
+    if not is_bookable(equipment):
+        return jsonify({"error": f"{equipment['name']} is not available for booking"}), 400
 
-    from_date = parse_date(data["from_date"])
-    to_date = parse_date(data["to_date"])
+    try:
+        from_date, to_date = parse_booking_dates(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     if to_date < from_date:
         return jsonify({"error": "End date cannot be before start date"}), 400
+
+    customer = (data.get("customer") or "").strip()
+    if not customer:
+        return jsonify({"error": "Customer name is required"}), 400
 
     bookings = load_bookings()
     conflict = find_conflicting_booking(equipment["id"], from_date, to_date, bookings)
@@ -148,7 +187,7 @@ def create_booking():
         "id": (max([b["id"] for b in bookings]) + 1) if bookings else 1,
         "equipment_id": equipment["id"],
         "equipment_name": equipment["name"],
-        "customer": data.get("customer", ""),
+        "customer": customer,
         "from_date": data["from_date"],
         "to_date": data["to_date"],
         "total": total,

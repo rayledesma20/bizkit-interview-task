@@ -23,7 +23,7 @@
   <select id="equipment"></select>
 
   <label for="customer">Customer name</label>
-  <input id="customer" type="text" placeholder="e.g. Jane Doe" />
+  <input id="customer" type="text" placeholder="e.g. Jane Doe"/>
 
   <label for="from">Start date</label>
   <input id="from" type="date" />
@@ -48,9 +48,11 @@
       equipmentList.forEach(item => {
         const opt = document.createElement("option");
         opt.value = item.id;
-        opt.textContent = `${item.name} (PHP ${item.daily_rate}/day)`;
+        const statusNote = item.status !== "available" ? ` - ${item.status}` : "";
+        opt.textContent = `${item.name} (PHP ${item.daily_rate}/day)${statusNote}`;
         select.appendChild(opt);
       });
+      updateTotal();
     }
 
     function selectedEquipment() {
@@ -69,6 +71,25 @@
       const from = document.getElementById("from").value;
       const to = document.getElementById("to").value;
       const totalEl = document.getElementById("total");
+      const messageEl = document.getElementById("message");
+      messageEl.className = "";
+      messageEl.textContent = "";
+
+      if (equipment && equipment.status !== "available") {
+        document.getElementById("customer").disabled = true;
+        document.getElementById("from").disabled = true;
+        document.getElementById("to").disabled = true;
+        document.getElementById("book").disabled = true;
+        totalEl.textContent = "Total: PHP 0.00";
+        messageEl.className = "message err";
+        messageEl.textContent = "Equipment is not available for booking.";
+        return;
+      }
+
+      document.getElementById("customer").disabled = false;
+      document.getElementById("from").disabled = false;
+      document.getElementById("to").disabled = false;
+      document.getElementById("book").disabled = false;
 
       if (!equipment || !from || !to) {
         totalEl.textContent = "Total: PHP 0.00";
@@ -85,29 +106,62 @@
 
     async function createBooking() {
       const messageEl = document.getElementById("message");
+      const bookBtn = document.getElementById("book");
       messageEl.className = "";
       messageEl.textContent = "";
 
+      const equipment = selectedEquipment();
+      const customer = document.getElementById("customer").value.trim();
+      const from_date = document.getElementById("from").value;
+      const to_date = document.getElementById("to").value;
+
+      if (!equipment || equipment.status !== "available") {
+        messageEl.className = "message err";
+        messageEl.textContent = "Equipment is not available for booking.";
+        return;
+      }
+      if (!customer) {
+        messageEl.className = "message err";
+        messageEl.textContent = "Please enter a customer name.";
+        return;
+      }
+      if (!from_date || !to_date) {
+        messageEl.className = "message err";
+        messageEl.textContent = "Please select start and end dates.";
+        return;
+      }
+      if (to_date < from_date) {
+        messageEl.className = "message err";
+        messageEl.textContent = "End date cannot be before start date.";
+        return;
+      }
+
       const body = {
-        equipment_id: Number(document.getElementById("equipment").value),
-        customer: document.getElementById("customer").value,
-        from_date: document.getElementById("from").value,
-        to_date: document.getElementById("to").value,
+        equipment_id: equipment.id,
+        customer,
+        from_date,
+        to_date,
       };
 
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
+      bookBtn.disabled = true;
+      try {
+        const res = await fetch("/api/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
 
-      if (res.ok) {
-        messageEl.className = "message ok";
-        messageEl.textContent = `Booked! Total PHP ${data.total.toFixed(2)}.`;
-      } else {
-        messageEl.className = "message err";
-        messageEl.textContent = data.error;
+        if (res.ok) {
+          messageEl.className = "message ok";
+          messageEl.textContent = `Booked! Total PHP ${data.total.toFixed(2)}.`;
+        } else {
+          messageEl.className = "message err";
+          messageEl.textContent = data.error;
+        }
+      } finally {
+        bookBtn.disabled = false;
+        updateTotal();
       }
     }
 
